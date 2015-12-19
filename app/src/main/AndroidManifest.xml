@@ -4,12 +4,24 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@drawable/app"
         android:label="@string/app_name"
         android:theme="@style/AppTheme" >
         <activity
             android:name=".activitys.MainActivity"
+            android:screenOrientation="portrait"
             android:label="@string/app_name" >
+        </activity>
+        <activity
+            android:name=".activitys.FailedActivity"
+            android:screenOrientation="portrait"
+            android:label="@string/title_activity_failed" >
+        </activity>
+        <activity
+            android:name=".activitys.StartActivity"
+            android:label="@string/app_name"
+            android:screenOrientation="portrait"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -18,4 +30,5 @@
         </activity>
     </application>
 
+    <uses-permission android:name="android.permission.VIBRATE"/>
 </manifest>

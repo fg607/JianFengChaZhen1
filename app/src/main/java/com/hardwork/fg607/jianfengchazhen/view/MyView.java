@@ -22,7 +22,10 @@ import java.util.List;
  */
 public class MyView extends View implements Runnable,View.OnTouchListener{
 
-    private List<Integer> mNailsRotateList;
+    public static final int MAX_INIT_NAILS = 15;
+    public static final int MAX_NAILS = 25;
+    public static final int MIN_PASS_NAILS = 3;
+    private List<Float> mNailsRotateList;
     private boolean mIsRotate = false;
     private Paint mPaint = new Paint();
     private Context mContext;
@@ -34,14 +37,26 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
     private int mCircleRadius = 30;//dip
     private int mNailNumerTextSize = 19;//dip
     private int mFailedTextSize = 21;//dip
+    private int mPassTextSize = 13;
     private int mConflictCount = 0;
     private boolean mIsRuning = false;
-    private int mMinRotate = 1;
-    private int mSleepTime = 12;
+    private float mMinAngle = 1.5f;
+    private int mSleepTime;
     private boolean mIsAddNewNail = false;
     private boolean mIsDrawing = false;
     private Bitmap mNailBitmap;
     private Bitmap mConflicNailBitmap;
+    private boolean mIsRotateClockwise;
+    private OnConflictListener mConflictedListener = null;
+    private int mInitNailNumber = 0;
+    private int mPassNailNumber = MIN_PASS_NAILS;
+    private int mPassNailCount = 0;
+
+    public static final int SPEED_NORMAL = 25;
+    public static final int SPEED_FAST = 15;
+    public static final int SPEED_SLOWLY = 30;
+
+
 
     public MyView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -53,7 +68,7 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
         thread.start();
     }
 
-    public void init(){
+    private void init(){
 
         //dip转化为px
         mNailWidth = DensityUtil.dip2px(mContext, mNailWidth);
@@ -61,10 +76,13 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
         mCircleRadius = DensityUtil.dip2px(mContext,mCircleRadius);
         mNailNumerTextSize = DensityUtil.dip2px(mContext,mNailNumerTextSize);
         mFailedTextSize = DensityUtil.dip2px(mContext,mFailedTextSize);
+        mPassTextSize = DensityUtil.dip2px(mContext,mPassTextSize);
 
         mIsRuning = true;
-        mIsRotate = true;
+        mIsRotate = false;
 
+        mSleepTime = SPEED_NORMAL;
+        mIsRotateClockwise = true;
         mNailsRotateList = new ArrayList<>();
         mViewSize =  mContext.getResources().getDisplayMetrics().widthPixels;
         mPaint.setTextAlign(Paint.Align.CENTER);
@@ -74,26 +92,47 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
         mConflicNailBitmap = BitmapUtil.readBitmapById(mContext, R.drawable.conflict_nail);
         mConflicNailBitmap = BitmapUtil.scaleImage(mConflicNailBitmap, mNailWidth, mNailHeight);
 
+
         setOnTouchListener(this);
     }
 
-    public void addNail(){
+    private void initNails() {
 
-        mNailsRotateList.add(0);
+        if(mInitNailNumber <= 0){
+            return;
+        }else if(mInitNailNumber > MAX_INIT_NAILS){
+            mInitNailNumber = MAX_INIT_NAILS;
+        }
 
-    }
+        float degree = (float)(360 / mInitNailNumber);
 
-    public void clickScreen(){
+        for(int i = 0;i < mInitNailNumber;i++){
 
-        if(!isRotated()){
-            mNailsRotateList.clear();
-            startRotate();
-        }else {
-            mIsAddNewNail = true;
+            mNailsRotateList.add(i*degree);
         }
 
     }
 
+    private void addNail(){
+
+        mNailsRotateList.add(0f);
+
+    }
+
+    private void clickScreen(){
+
+        if(isRotated()){
+            mIsAddNewNail = true;
+        }
+
+
+    }
+
+    public interface OnConflictListener {
+
+        public void failed();
+        public void successed();
+    }
  /* @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
 
@@ -113,21 +152,21 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
 
     }
 
-    public void drawing(Canvas canvas) {
+    private void drawing(Canvas canvas) {
 
         mPaint.setColor(Color.rgb(0, 0, 0));
 
         //画中心圆
         canvas.drawCircle(mViewSize / 2, mViewSize / 2, mCircleRadius, mPaint);
-        //画底下小圆
-        canvas.drawCircle(mViewSize / 2, mViewSize / 2 + mNailHeight + mCircleRadius / 2 + mNailWidth, mNailWidth / 2, mPaint);
 
         drawNails(canvas);
 
         drawNailsNumber(canvas);
 
-        if(mIsConflict) {
-            drawFailedInfo(canvas);
+        drawPassNails(canvas);
+
+       if(mIsConflict) {
+           drawConflictNail(canvas);
         }
 
 
@@ -135,11 +174,36 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
 
     }
 
-    private void drawFailedInfo(Canvas canvas) {
-        drawFailedText(canvas);
-        drawConflictNail(canvas);
+    private void drawPassNails(Canvas canvas) {
+
+        if(mIsAddNewNail){
+            mPassNailCount++;
+        }
+        int lastNumber = mPassNailNumber - mPassNailCount;
+
+        if(lastNumber >= 1){
+            drawPassNail(canvas,0,lastNumber);
+        }
+
+        if(lastNumber - 1 >= 1){
+            drawPassNail(canvas,mNailWidth*2,lastNumber -1);
+        }
+
+        if(lastNumber - 1 - 1 >= 1){
+            drawPassNail(canvas, mNailWidth * 4, lastNumber - 1 - 1);
+        }
+
     }
 
+    private void drawPassNail(Canvas canvas,float diffHeight,int lastNumber){
+
+        mPaint.setColor(Color.rgb(0, 0, 0));
+        canvas.drawCircle(mViewSize / 2, mViewSize / 2 + mNailHeight + mCircleRadius / 2 + mNailWidth + diffHeight, mNailWidth / 2, mPaint);
+
+        mPaint.setColor(Color.rgb(255, 255, 255));
+        mPaint.setTextSize(mPassTextSize);
+        canvas.drawText("" + lastNumber, mViewSize / 2, mViewSize / 2 + mNailHeight + mCircleRadius / 2 + mNailWidth + mPaint.getTextSize() / 3 + diffHeight, mPaint);
+    }
     private void drawConflictNail(Canvas canvas) {
 
         mMatrix.setTranslate(mViewSize / 2 - mConflicNailBitmap.getWidth() / 2, mViewSize / 2);
@@ -148,14 +212,14 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
         canvas.drawBitmap(mConflicNailBitmap, mMatrix, null);
     }
 
-    public void prepareDraw() {
+    private void prepareDraw() {
 
         if(mIsAddNewNail){
             addNail();
         }
     }
 
-    public void afterDraw() {
+    private void afterDraw() {
 
         if(mIsAddNewNail){
             mIsAddNewNail = false;
@@ -166,52 +230,57 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
             stopRotate();
             mIsConflict = false;
 
-        }else {
-
-            updateNails();
+        }else if(mPassNailCount == mPassNailNumber){
+            stopRotate();
+            mConflictedListener.successed();
         }
 
         mIsDrawing = false;
     }
 
-    public void updateNails(){
+    private void updateNails(){
 
         //遍历HashMap改变角度
 
         int size = mNailsRotateList.size();
-        int rotate;
+        float rotate;
+
         for(int i = 0;i < size;i++){
 
             rotate = mNailsRotateList.get(i);
 
-            if (rotate == 360) {
-                rotate = 0;
+            if(mIsRotateClockwise){
+
+                if (rotate == 360) {
+                    rotate = 0;
+                }
+                rotate += mMinAngle;
+            }else {
+
+                if (rotate == 0) {
+                    rotate = 360;
+                }
+                rotate -= mMinAngle;
             }
 
-            rotate += mMinRotate;
 
             mNailsRotateList.set(i,rotate);
         }
 
     }
-    public void drawFailedText(Canvas canvas) {
-            mPaint.setColor(Color.RED);
-            mPaint.setTextSize(mFailedTextSize);
-            canvas.drawText("你输了,再接再厉哦！",mViewSize / 2, + mPaint.getTextSize(),mPaint);
-    }
 
-    public void drawNailsNumber(Canvas canvas) {
+    private void drawNailsNumber(Canvas canvas) {
         mPaint.setColor(Color.rgb(255, 255, 255));
         mPaint.setTextSize(mNailNumerTextSize);
         canvas.drawText("" + mNailsRotateList.size(), mViewSize / 2, mViewSize / 2 + mPaint.getTextSize()/2, mPaint);
     }
 
-    public void drawNails(Canvas canvas) {
+    private void drawNails(Canvas canvas) {
 
         //清空碰撞检测标志
         mConflictCount = 0;
 
-        for(Integer rotate:mNailsRotateList){
+        for(Float rotate:mNailsRotateList){
 
             if(mIsAddNewNail){
                 checkConflict(rotate);
@@ -228,13 +297,24 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
 
     public void startRotate(){
 
+        mNailsRotateList.clear();
+        initNails();
         this.mIsRotate=true;
 
+    }
+
+    public void pauseRotate(){
+        this.mIsRotate= false;
+    }
+
+    public void resumeRotate(){
+        this.mIsRotate= true;
     }
 
     public void stopRotate(){
 
         this.mIsRotate=false;
+        mPassNailCount = 0;
 
     }
 
@@ -249,6 +329,8 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
         while(mIsRuning){
 
             if(mIsRotate && !mIsDrawing){
+
+                updateNails();
                 //刷新View
                 this.postInvalidate();
                 mIsDrawing = true;
@@ -264,7 +346,7 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
 
     }
 
-    public void checkConflict(int rotate) {
+    private void checkConflict(float rotate) {
 
         //根据小球的宽度和高度计算出角度在10-350之间的nail会与新添加nail产生碰撞（包含新添加nail,角度为0）
         if (rotate <= 10 || rotate >= 350) {
@@ -274,10 +356,54 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
             if (mConflictCount >= 2 ) {
 
                 mIsConflict = true;
+
+                if(mConflictedListener != null){
+                    mConflictedListener.failed();
+                }
+
             }
         }
     }
 
+    public void setRotateSpeed(int speed){
+
+        if(speed <= SPEED_FAST){
+            mSleepTime = SPEED_FAST;
+        }else if(speed <= SPEED_NORMAL){
+            mSleepTime = SPEED_NORMAL;
+        }else{
+            mSleepTime = SPEED_SLOWLY;
+        }
+
+    }
+
+    public void setRotateClockwise(boolean isRotateClockwise){
+        mIsRotateClockwise = isRotateClockwise;
+    }
+
+    public boolean getRotateClockwise(){
+        return mIsRotateClockwise;
+    }
+
+    public void setPassNailNumber(int passNumber){
+
+        int maxPassNailNumber = MAX_NAILS - mInitNailNumber;
+        if(passNumber > maxPassNailNumber){
+            mPassNailNumber = maxPassNailNumber;
+        }else if(passNumber < MIN_PASS_NAILS){
+            mPassNailNumber = MIN_PASS_NAILS;
+        }else {
+            mPassNailNumber = passNumber;
+        }
+    }
+
+    public void setOnConflictedListener(OnConflictListener listener){
+        mConflictedListener = listener;
+    }
+
+    public void setInitNailNumber(int number){
+        mInitNailNumber = number;
+    }
 
     @Override
     public boolean onTouch(View v, MotionEvent event) {
