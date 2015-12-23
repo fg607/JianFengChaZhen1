@@ -251,16 +251,19 @@ public class MyView extends View implements Runnable,View.OnTouchListener{
 
             if(mIsRotateClockwise){
 
-                if (rotate == 360) {
-                    rotate = 0;
-                }
+
                 rotate += mMinAngle;
+
+                if (rotate >= 360) {
+                    rotate -= 360;
+                }
             }else {
 
-                if (rotate == 0) {
-                    rotate = 360;
-                }
                 rotate -= mMinAngle;
+
+                if (rotate <= 0) {
+                    rotate += 360;
+                }
             }
 
 
